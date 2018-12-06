@@ -3,18 +3,16 @@ const { Component } = React
 const PropTypes = require('prop-types')
 const { getDeviceId, getFacingModePattern } = require('./getDeviceId')
 const havePropsChanged = require('./havePropsChanged')
+const createBlob = require('./createBlob')
 
 // Require adapter to support older browser implementations
 require('webrtc-adapter')
 
 // Inline worker.js as a string value of workerBlob.
-let workerBlob
-if(typeof Blob === 'function') {
-  // eslint-disable-next-line
-  workerBlob = new Blob([__inline('../lib/worker.js')], {
-    type: 'application/javascript',
-  })
-}
+// eslint-disable-next-line
+let workerBlob = createBlob([__inline('../lib/worker.js')], {
+  type: 'application/javascript',
+})
 
 // Props that are allowed to change dynamicly
 const propsKeys = ['delay', 'legacyMode', 'facingMode']
@@ -32,12 +30,14 @@ module.exports = class Reader extends Component {
     showViewFinder: PropTypes.bool,
     style: PropTypes.any,
     className: PropTypes.string,
+    constraints: PropTypes.object
   };
   static defaultProps = {
     delay: 500,
     resolution: 600,
     facingMode: 'environment',
     showViewFinder: true,
+    constraints: null
   };
 
   els = {};
@@ -140,23 +140,22 @@ module.exports = class Reader extends Component {
     // Check browser facingMode constraint support
     // Firefox ignores facingMode or deviceId constraints
     const isFirefox = /firefox/i.test(navigator.userAgent)
-    const supported = navigator.mediaDevices !== undefined
-      ? navigator.mediaDevices.getSupportedConstraints()
-      : {}
+    let supported = {}
+    if (typeof navigator.mediaDevices.getSupportedConstraints === 'function') {
+      supported = navigator.mediaDevices.getSupportedConstraints()
+    }
     const constraints = {}
 
     if(supported.facingMode) {
       constraints.facingMode = { ideal: facingMode }
     }
-    if(supported.aspectRatio) {
-      constraints.aspectRatio = 1
-    }
     if(supported.frameRate) {
-      constraints.frameRate = {ideal: 25, min: 10}
+      constraints.frameRate = { ideal: 25, min: 10 }
     }
+
     const vConstraintsPromise = (supported.facingMode || isFirefox)
-      ? Promise.resolve(constraints)
-      : getDeviceId(facingMode).then(deviceId => ({ deviceId }))
+      ? Promise.resolve(props.constraints || constraints)
+      : getDeviceId(facingMode).then(deviceId => Object.assign({}, { deviceId }, props.constraints))
 
     vConstraintsPromise
       .then(video => navigator.mediaDevices.getUserMedia({ video }))
@@ -165,6 +164,11 @@ module.exports = class Reader extends Component {
   }
   handleVideo(stream) {
     const { preview } = this.els
+
+    // Preview element hasn't been rendered so wait for it.
+    if (!preview) {
+      setTimeout(this.handleVideo, 200, stream)
+    }
 
     // Handle different browser implementations of MediaStreams as src
     if(preview.srcObject !== undefined){
@@ -312,6 +316,7 @@ module.exports = class Reader extends Component {
     } = this.props
 
     const containerStyle = {
+      overflow: 'hidden',
       position: 'relative',
       width: '100%',
       paddingTop: '100%',

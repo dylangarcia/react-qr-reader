@@ -1,6 +1,6 @@
 import React, { Component } from 'react'
 import { storiesOf, action } from '@storybook/react'
-import Reader from './lib'
+import Reader from '../lib'
 
 class Wrapper extends Component {
   constructor(props) {
@@ -49,6 +49,7 @@ class Wrapper extends Component {
           maxImageSize={1000}
           delay={this.state.delay}
           className="reader-container"
+          constraints={{ deviceId: 2 }}
         />
         {
           legacyMode && (
